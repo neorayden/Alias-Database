@@ -33,10 +33,12 @@ async function loadData(){
   };
 }
 function matches(n, q){ return norm(n.name).includes(q) || n.aliases.some(a => norm(a).includes(q)); }
+let showAll = false;
 function render(){
   const q = norm(document.getElementById("q").value.trim());
   const out = document.getElementById("out");
   if(!DATA){ return; }
+  if(!q && !showAll){ out.innerHTML = ''; return; }
   const clusters = DATA.clusters.filter(c => !q || DATA.names.some(n => n.cluster_id === c.id && matches(n, q)));
   if(!clusters.length){ out.innerHTML = "<p>No match. Try a first name, last name, or nickname (e.g. Teddy, Pappy, Billie).</p>"; return; }
   out.innerHTML = clusters.map(c => {
@@ -47,8 +49,8 @@ function render(){
       + claims.map(cl => '<p><strong>' + byId[cl.from] + ' → ' + byId[cl.to] + '</strong> <span class="muted">— ' + cl.relationship.replaceAll('_', ' ') + ' · ' + cl.status.replaceAll('_', ' ') + ' · ' + cl.confidence + ' confidence</span><br>' + cl.summary + '</p>').join('') + '</div>';
   }).join('');
 }
-function show(v){ document.getElementById("q").value = v; render(); }
-document.getElementById("q").addEventListener("input", render);
+function show(v){ showAll = (v === ''); document.getElementById("q").value = v; render(); }
+document.getElementById("q").addEventListener("input", () => { showAll = false; render(); });
 loadData().then(render).catch(() => {
   document.getElementById("out").innerHTML = "<p>Couldn't reach the database right now — check back in a bit.</p>";
 });
