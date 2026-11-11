@@ -20,16 +20,15 @@ const norm = s => (s || "").toLowerCase();
 let DATA = null;
 
 async function loadData(){
-  const [clusters, names, claims] = await Promise.all([
+  const [clusters, names] = await Promise.all([
     fetch(SUPABASE_URL + "/rest/v1/clusters?select=id,title&limit=1000", { headers }).then(r => r.json()),
     fetch(SUPABASE_URL + "/rest/v1/names?select=id,cluster_id,name,aliases&limit=1000", { headers }).then(r => r.json()),
-    fetch(SUPABASE_URL + "/rest/v1/claims?select=id,from_name_id,to_name_id,relationship,status,confidence,summary&limit=1000", { headers }).then(r => r.json()),
   ]);
   // The REST field names differ from the local data.json names; normalise them.
+  // Results show connected names only, so claims are never fetched.
   DATA = {
     clusters,
     names: names.map(n => ({ id: n.id, cluster_id: n.cluster_id, name: n.name, aliases: n.aliases || [] })),
-    claims: claims.map(c => ({ id: c.id, from: c.from_name_id, to: c.to_name_id, relationship: c.relationship, status: c.status, confidence: c.confidence, summary: c.summary })),
   };
 }
 function matches(n, q){ return norm(n.name).includes(q) || n.aliases.some(a => norm(a).includes(q)); }
@@ -43,10 +42,7 @@ function render(){
   if(!clusters.length){ out.innerHTML = "<p>No match. Try a first name, last name, or nickname (e.g. Teddy, Pappy, Billie).</p>"; return; }
   out.innerHTML = clusters.map(c => {
     const members = DATA.names.filter(n => n.cluster_id === c.id);
-    const claims = DATA.claims.filter(cl => members.some(m => m.id === cl.from));
-    const byId = Object.fromEntries(DATA.names.map(n => [n.id, n.name]));
-    return '<div class="card"><h2>' + c.title + '</h2><p>' + members.map(m => '<span class="tag">' + m.name + '</span>').join(' ') + '</p>'
-      + claims.map(cl => '<p><strong>' + byId[cl.from] + ' → ' + byId[cl.to] + '</strong> <span class="muted">— ' + cl.relationship.replaceAll('_', ' ') + ' · ' + cl.status.replaceAll('_', ' ') + ' · ' + cl.confidence + ' confidence</span><br>' + cl.summary + '</p>').join('') + '</div>';
+    return '<div class="card"><h2>' + c.title + '</h2><p>' + members.map(m => '<span class="tag">' + m.name + '</span>').join(' ') + '</p></div>';
   }).join('');
 }
 function show(v){ showAll = (v === ''); document.getElementById("q").value = v; render(); }
