@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Identity Cross-Reference</title>
+<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:3rem auto;padding:0 1rem;line-height:1.5}h1{font-size:1.4rem;text-align:center}input{width:100%;font-size:1.1rem;padding:.7rem;border:1px solid #ccc;border-radius:8px}input:focus{outline:none;border-color:#888}button{font-size:1rem;padding:.5rem 1rem;margin:.4rem 0 0;cursor:pointer}.card{border:1px solid #ddd;border-radius:8px;padding:1rem 1.2rem;margin:1.5rem 0}.tag{display:inline-block;background:#f0f0f0;border-radius:12px;padding:.15rem .7rem;margin:.15rem;font-size:.9rem}.muted{color:#666;font-size:.9rem}</style></head>
+<body><h1>Identity Cross-Reference</h1>
+<p><input id="q" placeholder="Search a name…" autofocus></p>
+<p><button onclick="show('')">Browse all</button></p>
+<div id="out"><p class="muted">Loading…</p></div>
+<script>
+// Live version — fetches data from Supabase on every load, so the shared page
+// always shows the latest entries. No source fields are ever requested.
+// Fill in these two values (or have Lux fill them in), then deploy this file
+// as index.html on Vercel. The anon key is read-only by design: it can only
+// read, it cannot write, and the queries below never ask for source/source_url.
+const SUPABASE_URL = "https://qocaprqcevhjaauoowkc.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvY2FwcnFjZXZoamFhdW9vd2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0MTg4MzgsImV4cCI6MjEwOTk5NDgzOH0.yopGzG8qkHW5td1CpkpfqJObEdqu0ZS2BvyFvySi3LI";
+
+const headers = { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY };
+const norm = s => (s || "").toLowerCase();
+let DATA = null;
+
+async function loadData(){
+  const [clusters, names, claims] = await Promise.all([
+    fetch(SUPABASE_URL + "/rest/v1/clusters?select=id,title&limit=1000", { headers }).then(r => r.json()),
+    fetch(SUPABASE_URL + "/rest/v1/names?select=id,cluster_id,name,aliases&limit=1000", { headers }).then(r => r.json()),
+    fetch(SUPABASE_URL + "/rest/v1/claims?select=id,from_name_id,to_name_id,relationship,status,confidence,summary&limit=1000", { headers }).then(r => r.json()),
+  ]);
+  // The REST field names differ from the local data.json names; normalise them.
+  DATA = {
+    clusters,
+    names: names.map(n => ({ id: n.id, cluster_id: n.cluster_id, name: n.name, aliases: n.aliases || [] })),
+    claims: claims.map(c => ({ id: c.id, from: c.from_name_id, to: c.to_name_id, relationship: c.relationship, status: c.status, confidence: c.confidence, summary: c.summary })),
+  };
+}
+function matches(n, q){ return norm(n.name).includes(q) || n.aliases.some(a => norm(a).includes(q)); }
+function render(){
+  const q = norm(document.getElementById("q").value.trim());
+  const out = document.getElementById("out");
+  if(!DATA){ return; }
+  const clusters = DATA.clusters.filter(c => !q || DATA.names.some(n => n.cluster_id === c.id && matches(n, q)));
+  if(!clusters.length){ out.innerHTML = "<p>No match. Try a first name, last name, or nickname (e.g. Teddy, Pappy, Billie).</p>"; return; }
+  out.innerHTML = clusters.map(c => {
+    const members = DATA.names.filter(n => n.cluster_id === c.id);
+    const claims = DATA.claims.filter(cl => members.some(m => m.id === cl.from));
+    const byId = Object.fromEntries(DATA.names.map(n => [n.id, n.name]));
+    return '<div class="card"><h2>' + c.title + '</h2><p>' + members.map(m => '<span class="tag">' + m.name + '</span>').join(' ') + '</p>'
+      + claims.map(cl => '<p><strong>' + byId[cl.from] + ' → ' + byId[cl.to] + '</strong> <span class="muted">— ' + cl.relationship.replaceAll('_', ' ') + ' · ' + cl.status.replaceAll('_', ' ') + ' · ' + cl.confidence + ' confidence</span><br>' + cl.summary + '</p>').join('') + '</div>';
+  }).join('');
+}
+function show(v){ document.getElementById("q").value = v; render(); }
+document.getElementById("q").addEventListener("input", render);
+loadData().then(render).catch(() => {
+  document.getElementById("out").innerHTML = "<p>Couldn't reach the database right now — check back in a bit.</p>";
+});
+</script></body></html>
